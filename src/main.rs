@@ -8,6 +8,8 @@ use async_trait::async_trait;
 use pingora::prelude::*;
 use std::sync::Arc;
 
+const UPSTREAM_HOST: &str = "one.one.one.one";
+
 pub struct LB(Arc<LoadBalancer<RoundRobin>>);
 
 #[async_trait]
@@ -26,7 +28,7 @@ impl ProxyHttp for LB {
             .select(b"", 256)
             .ok_or_else(|| Error::new_str("no upstream available"))?;
 
-        let peer = HttpPeer::new(upstream, true, "one.one.one.one".to_string());
+        let peer = HttpPeer::new(upstream, true, UPSTREAM_HOST.to_string());
         Ok(Box::new(peer))
     }
 
@@ -36,7 +38,7 @@ impl ProxyHttp for LB {
         upstream_request: &mut RequestHeader,
         _ctx: &mut Self::CTX,
     ) -> Result<()> {
-        upstream_request.insert_header("Host", "one.one.one.one")?;
+        upstream_request.insert_header("Host", UPSTREAM_HOST)?;
         Ok(())
     }
 }
@@ -53,4 +55,26 @@ fn main() {
 
     server.add_service(proxy);
     server.run_forever();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_robin_selects_a_configured_upstream() {
+        // Arrange
+        let lb = LoadBalancer::<RoundRobin>::try_from_iter(["1.1.1.1:443", "1.0.0.1:443"]).unwrap();
+
+        // Act
+        let selected = lb.select(b"", 256);
+
+        // Assert
+        assert!(selected.is_some());
+        let addr = selected.unwrap().addr.to_string();
+        assert!(
+            addr == "1.1.1.1:443" || addr == "1.0.0.1:443",
+            "selected upstream {addr} was not one of the configured backends"
+        );
+    }
 }
