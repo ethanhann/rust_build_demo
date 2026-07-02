@@ -15,6 +15,12 @@ jobs:
     name: Validate (lint, test)
     runs-on: ubuntu-latest
 
+    # Baseline #1 (Linker): no RUSTFLAGS override, so every link step uses
+    # the default GNU ld.
+    # Baseline #2 (Compiler Cache): no sccache, so every compilation unit is
+    # rebuilt from scratch on every run.
+    # Baseline #3 (Dependency Cache): no cache action, so all dependencies
+    # are recompiled on every run.
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,6 +34,8 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
+      # Baseline #4 (Test Runner): plain `cargo test`, which runs test
+      # binaries with less parallelism than nextest.
       - name: Run tests
         run: cargo test --locked --all-features
 
@@ -49,9 +57,13 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # Baseline #5 (Cross Compilation): `cargo install` compiles the cross
+      # tool from source on every run before any project code builds.
       - name: Install cross
         run: cargo install cross
 
+      # Baseline #6 (Build Environment): cross runs the build inside a Docker
+      # container that must be pulled first, once per matrix target.
       - name: Build with cross
         run: cross build --release --locked --target ${{ matrix.target }}
 
