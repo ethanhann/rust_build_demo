@@ -1,38 +1,50 @@
-//! Taken from the official bevy examples for a demonstration purposes.
+use async_trait::async_trait;
+use pingora::prelude::*;
+use std::sync::Arc;
 
-use bevy::prelude::*;
+pub struct LB(Arc<LoadBalancer<RoundRobin>>);
 
-fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .add_systems(Startup, scene.spawn())
-        .run();
+#[async_trait]
+impl ProxyHttp for LB {
+    type CTX = ();
+
+    fn new_ctx(&self) -> Self::CTX {}
+
+    async fn upstream_peer(
+        &self,
+        _session: &mut Session,
+        _ctx: &mut Self::CTX,
+    ) -> Result<Box<HttpPeer>> {
+        let upstream = self
+            .0
+            .select(b"", 256)
+            .ok_or_else(|| Error::new_str("no upstream available"))?;
+
+        let peer = HttpPeer::new(upstream, true, "one.one.one.one".to_string());
+        Ok(Box::new(peer))
+    }
+
+    async fn upstream_request_filter(
+        &self,
+        _session: &mut Session,
+        upstream_request: &mut RequestHeader,
+        _ctx: &mut Self::CTX,
+    ) -> Result<()> {
+        upstream_request.insert_header("Host", "one.one.one.one")?;
+        Ok(())
+    }
 }
 
-/// set up a simple 3D scene
-fn scene() -> impl SceneList {
-    bsn_list! [
-        (
-            #CircularBase
-            Mesh3d(asset_value(Circle::new(4.0)))
-            MeshMaterial3d::<StandardMaterial>(asset_value(Color::WHITE))
-            Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
-        ),
-        (
-            #Cube
-            Mesh3d(asset_value(Cuboid::new(1.0, 1.0, 1.0)))
-            MeshMaterial3d::<StandardMaterial>(asset_value(Color::srgb_u8(124, 144, 255)))
-            Transform::from_xyz(0.0, 0.5, 0.0)
-        ),
-        (
-            PointLight {
-                shadow_maps_enabled: true,
-            }
-            Transform::from_xyz(4.0, 8.0, 4.0)
-        ),
-        (
-            Camera3d
-            template_value(Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y))
-        )
-    ]
+fn main() {
+    let mut server = Server::new(None).expect("failed to create server");
+    server.bootstrap();
+
+    let upstreams =
+        LoadBalancer::try_from_iter(["1.1.1.1:443", "1.0.0.1:443"]).expect("invalid upstreams");
+
+    let mut proxy = http_proxy_service(&server.configuration, LB(Arc::new(upstreams)));
+    proxy.add_tcp("0.0.0.0:6188");
+
+    server.add_service(proxy);
+    server.run_forever();
 }
