@@ -1,3 +1,9 @@
+// NOTE: This code is intentionally simple and is not meant to be a production-ready application.
+// The purpose of this repository is to demonstrate optimized vs. unoptimized GitHub Actions CI/CD
+// workflows for Rust projects.
+// The actual functionality of this load balancer proxy is unimportant.
+// Focus on the build configuration and CI workflow files instead.
+
 use async_trait::async_trait;
 use pingora::prelude::*;
 use std::sync::Arc;
