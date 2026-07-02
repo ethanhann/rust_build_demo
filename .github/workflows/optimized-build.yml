@@ -99,5 +99,5 @@ jobs:
       - name: Upload binary
         uses: actions/upload-artifact@v7
         with:
-          name: my-app-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/my-app
+          name: rust_build_demo-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/rust_build_demo
