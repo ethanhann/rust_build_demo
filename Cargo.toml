@@ -4,4 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.19.0"
+pingora = { version = "0.8", features = ["lb"] }
+async-trait = "0.1"
+
+[profile.release]
+opt-level = 3               # Maximize performance
+debug = true                # Keep debug symbols for profiling
+split-debuginfo = "packed"  # Create .dwp alongside the binary
+lto = "fat"                 # Link-time optimization
+codegen-units = 1           # More aggressive optimization by reducing parallelism
+panic = "abort"             # Reduce panic handling code
+incremental = false         # Ensure no incremental compilation
+overflow-checks = true      # Ensure safer arithmetic operations
