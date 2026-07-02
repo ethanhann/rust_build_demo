@@ -1,0 +1,103 @@
+name: Optimized Rust CI
+
+permissions:
+  contents: read
+  checks: write
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate:
+    name: Validate (lint, test)
+    runs-on: ubuntu-latest
+    env:
+      # Use the mold linker for faster link times.
+      RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
+      # Cache individual compilation units in the GitHub Actions cache.
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install mold
+        run: sudo apt-get update -y && sudo apt-get install -y mold
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: validation
+
+      - name: cargo fmt
+        run: cargo fmt -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Prebuilt binary download instead of a slow `cargo install`.
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Run tests
+        run: cargo nextest run --all-features
+
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    needs: [ validate ]
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Zig provides the cross-linker, so both musl targets build
+      # on a plain x86_64 runner without QEMU or dedicated ARM hardware.
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: "0.12.0"
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cargo-zigbuild
+        uses: taiki-e/install-action@cargo-zigbuild
+
+      - name: Build with zigbuild
+        run: cargo zigbuild --release --locked --target ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: my-app-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/my-app
