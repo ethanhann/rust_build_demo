@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 pingora = { version = "0.8", features = ["lb"] }
 async-trait = "0.1"
+rocksdb = "0.24"
 
 [profile.release]
 opt-level = 3               # Maximize performance
